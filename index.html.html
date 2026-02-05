@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>SKIBIDI ENT 🔵</title>
+<style>
+body{font-family:Arial;background:#e8f0ff;margin:0}
+header{background:#0b5ed7;color:white;padding:10px;text-align:center;font-size:24px}
+.box{max-width:1000px;margin:20px auto;background:white;border-radius:10px;padding:15px}
+button{background:#0b5ed7;color:white;border:none;padding:6px 10px;border-radius:5px;margin:2px}
+.tab{display:inline-block;margin:5px;padding:6px 10px;background:#cfe2ff;border-radius:5px;cursor:pointer}
+.tab.active{background:white;border-bottom:3px solid #0b5ed7}
+.star{color:gold;font-size:18px}
+.trash{cursor:pointer;color:red}
+textarea{width:300px;height:50px;display:block;margin-top:5px;margin-bottom:5px}
+</style>
+</head>
+<body>
+
+<header>📚 SKIBIDI ENT 🔵</header>
+
+<div class="box" id="login">
+  <h3>Connexion</h3>
+  <input id="id" placeholder="Identifiant">
+  <input id="pw" type="password" placeholder="Mot de passe">
+  <button onclick="connect()">Se connecter</button>
+  <p id="err" style="color:red"></p>
+</div>
+
+<div class="box" id="app" style="display:none">
+  <div id="tabs"></div>
+  <div id="content"></div>
+</div>
+
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.15.0/firebase-app.js";
+import { getDatabase, ref, set, onValue, get, update } from "https://www.gstatic.com/firebasejs/10.15.0/firebase-database.js";
+
+// Config Firebase
+const firebaseConfig = {
+  apiKey: "AIzaSyBOULSR7NkI3P9XE_sXnGSu-n0rdAy4yFA",
+  authDomain: "skibidient3.firebaseapp.com",
+  projectId: "skibidient3",
+  storageBucket: "skibidient3.firebasestorage.app",
+  messagingSenderId: "388382644444",
+  appId: "1:388382644444:web:177277f0850212b039bc19",
+  measurementId: "G-5WQGDM7BQX"
+};
+
+// Init Firebase
+const appFirebase = initializeApp(firebaseConfig);
+const db = getDatabase(appFirebase);
+
+// --- Utilisateurs ---
+const users={
+  sahli:{pass:"sahli123",role:"prof",name:"M. Sahli"},
+  bouhmadi:{pass:"bouhmadi123",role:"prof",name:"M. Bouhmadi"},
+  ouachaou:{pass:"secretaire",role:"secretaire",name:"M. Ouachaou"},
+  nassim:{pass:"nassim",role:"eleve",name:"Nassim"},
+  arthur:{pass:"arthur",role:"eleve",name:"Arthur"},
+  sarah:{pass:"sarah",role:"eleve",name:"Sarah"},
+  rayan:{pass:"rayan",role:"eleve",name:"Rayan"},
+  nathan:{pass:"nathan",role:"eleve",name:"Nathan"},
+  aymend:{pass:"aymend",role:"eleve",name:"Aymen Dib"},
+  aymenf:{pass:"aymenf",role:"eleve",name:"Aymen Ferhane"},
+  nael:{pass:"nael",role:"eleve",name:"Nael"}
+};
+
+let current=null;
+
+// --- Connexion ---
+function eleves(){return Object.keys(users).filter(u=>users[u].role=="eleve");}
+
+function connect(){
+  if(!users[id.value]||users[id.value].pass!=pw.value){err.textContent="Erreur";return;}
+  current=id.value;
+  login.style.display="none";
+  app.style.display="block";
+  buildTabs();
+}
+
+// --- Tabs ---
+function buildTabs(){
+  let r=users[current].role;
+  let t=["Notes","Étoiles","Missions","Emploi du temps","Appel"];
+  if(r=="secretaire") t=["Justification"];
+  if(r=="prof" || current=="sahli" || r=="eleve") t.push("Mots");
+  let h="";
+  t.forEach(x=>h+=`<span class="tab" onclick="openTab('${x}')">${x}</span>`);
+  tabs.innerHTML=h;
+  openTab(t[0]);
+}
+
+function openTab(n){
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+  [...tabs.children].find(x=>x.textContent==n).classList.add("active");
+  if(n=="Notes") notesTab();
+  if(n=="Étoiles") starsTab();
+  if(n=="Missions") missionsTab();
+  if(n=="Emploi du temps") edtTab();
+  if(n=="Appel") appelTab();
+  if(n=="Justification") justifTab();
+  if(n=="Mots") buildMotTab();
+}
+
+// --- Notes ---
+function notesTab(){
+  let h="<h3>📊 Notes</h3>";
+  if(users[current].role=="prof"){
+    h+=`<select id="e">${eleves().map(e=>`<option>${e}</option>`).join("")}</select>
+        <input id="v" placeholder="15/20">
+        <button onclick="addNote()">➕</button>
+        <button onclick="resetNotes()">🗑️ Reset</button>`;
+  }
+  h+="<ul id='notesList'></ul>";
+  content.innerHTML=h;
+  showNotes();
+}
+
+function showNotes(){
+  const ul = document.getElementById("notesList");
+  onValue(ref(db,'notes'), snapshot=>{
+    const notes = snapshot.val() || {};
+    ul.innerHTML="";
+    for(let e in notes){
+      if(current==e || users[current].role!="eleve"){
+        notes[e].forEach((n,i)=>{
+          const li = document.createElement("li");
+          li.innerHTML = `${users[e].name} : ${n} ${users[current].role=="prof"?`<span class="trash" onclick="delNote('${e}',${i})">🗑️</span>`:""}`;
+          ul.appendChild(li);
+        });
+      }
+    }
+  });
+}
+
+function addNote(){
+  const eleve = e.value;
+  const valeur = v.value;
+  const noteRef = ref(db,'notes/'+eleve);
+  get(noteRef).then(snap=>{
+    let arr = snap.val()||[];
+    arr.push(valeur);
+    set(noteRef,arr);
+  });
+}
+
+function delNote(eleve,i){
+  const noteRef = ref(db,'notes/'+eleve);
+  get(noteRef).then(snap=>{
+    let arr = snap.val()||[];
+    arr.splice(i,1);
+    set(noteRef,arr);
+  });
+}
+
+function resetNotes(){ set(ref(db,'notes'),{}); }
+
+// --- Étoiles ---
+function starsTab(){
+  let h="<h3>⭐ Étoiles</h3>";
+  if(users[current].role=="prof"){
+    h+=`<select id="e">${eleves().map(e=>`<option>${e}</option>`).join("")}</select>
+        <select id="v"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+        <button onclick="addStar()">➕</button>
+        <button onclick="resetStars()">🗑️ Reset</button>`;
+  }
+  h+="<ul id='starsList'></ul>";
+  content.innerHTML=h;
+  showStars();
+}
+
+function showStars(){
+  const ul = document.getElementById("starsList");
+  onValue(ref(db,'stars'), snapshot=>{
+    const stars = snapshot.val() || {};
+    ul.innerHTML="";
+    for(let e in stars){
+      if(current==e || users[current].role!="eleve"){
+        stars[e].forEach((s,i)=>{
+          const li = document.createElement("li");
+          li.innerHTML = `${users[e].name} : <span class="star">${"★".repeat(s)}</span> ${users[current].role=="prof"?`<span class="trash" onclick="delStar('${e}',${i})">🗑️</span>`:""}`;
+          ul.appendChild(li);
+        });
+      }
+    }
+  });
+}
+
+function addStar(){
+  const eleve = e.value;
+  const val = parseInt(v.value);
+  const starRef = ref(db,'stars/'+eleve);
+  get(starRef).then(snap=>{
+    let arr = snap.val()||[];
+    arr.push(val);
+    set(starRef,arr);
+  });
+}
+
+function delStar(e,i){
+  const starRef = ref(db,'stars/'+eleve);
+  get(starRef).then(snap=>{
+    let arr = snap.val()||[];
+    arr.splice(i,1);
+    set(starRef,arr);
+  });
+}
+
+function resetStars(){ set(ref(db,'stars'),{}); }
+
+// --- Missions ---
+function missionsTab(){
+  let h="<h3>📚 Missions</h3>";
+  if(users[current].role=="prof"){
+    h+=`<input id="m"><button onclick="addMission()">➕</button>`;
+  }
+  h+="<ul id='missionsList'></ul>";
+  content.innerHTML=h;
+  showMissions();
+}
+
+function showMissions(){
+  const ul = document.getElementById("missionsList");
+  onValue(ref(db,'missions'), snapshot=>{
+    const missions = snapshot.val()||[];
+    ul.innerHTML="";
+    missions.forEach((m,i)=>{
+      const li=document.createElement("li");
+      li.innerHTML = `${m} ${users[current].role=="prof"?`<span class="trash" onclick="delMission(${i})">🗑️</span>`:""}`;
+      ul.appendChild(li);
+    });
+  });
+}
+
+function addMission(){
+  const val = m.value;
+  const refM = ref(db,'missions');
+  get(refM).then(snap=>{
+    let arr = snap.val()||[];
+    arr.push(val);
+    set(refM,arr);
+  });
+}
+
+function delMission(i){
+  const refM = ref(db,'missions');
+  get(refM).then(snap=>{
+    let arr = snap.val()||[];
+    arr.splice(i,1);
+    set(refM,arr);
+  });
+}
+
+// --- Emploi du temps ---
+const edt={
+  "Lundi":["10h05-10h25","15h00-15h20"],
+  "Mardi":["10h05-10h25"],
+  "Mercredi":["10h05-10h25"],
+  "Jeudi":["10h05-10h25","15h00-15h20"],
+  "Vendredi":["10h05-10h25"]
+};
+
+function edtTab(){
+  let h="<h3>🗓️ Emploi du temps</h3><ul>";
+  for(let j in edt){
+    h+=`<li>${j} : ${edt[j].join(" / ")} ${users[current].role=="prof"?`<button onclick="annuler('${j}')">❌</button>`:""}</li>`;
+  }
+  h+="</ul>";
+  content.innerHTML=h;
+}
+
+function annuler(j){
+  update(ref(db,'edt/'+j), {annule:true});
+}
+
+// --- Appel ---
+function appelTab(){
+  let h="<h3>📝 Appel</h3>";
+  if(users[current].role=="prof"){
+    h+=`<select id="e">${eleves().map(e=>`<option>${e}</option>`).join("")}</select>
+        <select id="v"><option>Présent</option><option>Absent</option><option>Retard</option></select>
+        <button onclick="setAppel()">Valider</button>`;
+  }
+  h+="<ul id='appelList'></ul>";
+  content.innerHTML=h;
+  showAppel();
+}
+
+function showAppel(){
+  const ul = document.getElementById("appelList");
+  onValue(ref(db,'appel'), snapshot=>{
+    const appel = snapshot.val()||{};
+    ul.innerHTML="";
+    eleves().forEach(e=>{
+      const st = appel[e]||"-";
+      const li=document.createElement("li");
+      li.innerHTML = `${users[e].name} : ${st}`;
+      ul.appendChild(li);
+    });
+  });
+}
+
+function setAppel(){
+  set(ref(db,'appel/'+e.value), v.value);
+}
+
+// --- Mots ---
+function buildMotTab(){
+  let h="<h3>✉️ Mots dans le carnet</h3>";
+  if(users[current].role=="prof" || current=="sahli"){
+    h+=`<select id="motEleve">${eleves().map(e=>`<option>${e}</option>`).join("")}</select>
+        <textarea id="motTexte" placeholder="Texte du mot"></textarea>
+        <button onclick="envoyerMot()">Envoyer ✉️</button>`;
+  }
+  h+="<ul id='motsList'></ul>";
+  content.innerHTML=h;
+  showMots();
+}
+
+function showMots(){
+  const ul = document.getElementById("motsList");
+  onValue(ref(db,'mots'), snapshot=>{
+    const mots = snapshot.val()||{};
+    ul.innerHTML="";
+    for(let e of eleves()){
+      let mot = mots[e];
+      if(!mot) continue;
+      const li=document.createElement("li");
+      let role = users[current].role;
+      let statut = mot.statut;
+      let text = `${users[e].name} : "${mot.texte}" - ${statut}`;
+      if(current=="sahli") text=`<span class="trash" onclick="delMot('${e}')">🗑️</span> ` + text;
+      if((role=="prof"||current=="sahli") && statut=="Signé, en attente validation prof"){
+        text+=` <button onclick="valideMot('${e}')">✅ Valider</button> <button onclick="refuseMot('${e}')">❌ Refuser</button>`;
+      }
+      if(role=="eleve" && current==e && statut=="Pas encore signé"){
+        text+=` <button onclick="signerMot('${e}')">Signer ✍️</button>`;
+      }
+      li.innerHTML=text;
+      ul.appendChild(li);
+    }
+  });
+}
+
+function envoyerMot(){
+  const e = document.getElementById("motEleve").value;
+  const texte = document.getElementById("motTexte").value.trim();
+  if(!texte) return alert("Écrire un mot !");
+  set(ref(db,'mots/'+e), {texte:texte, statut:"Pas encore signé"});
+  alert("✅ Mot envoyé à "+users[e].name);
+}
+
+function signerMot(eleve){ set(ref(db,'mots/'+eleve+'/statut'), "Signé, en attente validation prof"); alert("✅ Mot signé"); }
+function valideMot(eleve){ set(ref(db,'mots/'+eleve+'/statut'), "Validé ✅"); alert("✅ Mot validé"); }
+function refuseMot(eleve){ set(ref(db,'mots/'+eleve+'/statut'), "Refusé ❌"); alert("❌ Mot refusé"); }
+function delMot(eleve){ set(ref(db,'mots/'+eleve), null); alert("🗑️ Mot supprimé"); }
+
+</script>
+</body>
+</html>
